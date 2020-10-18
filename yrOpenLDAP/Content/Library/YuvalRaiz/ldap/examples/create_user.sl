@@ -6,7 +6,7 @@ flow:
     - ldap_username
     - ldap_password:
         sensitive: true
-    - dn: 'uid=test.user,ou=Users,dc=example,dc=com'
+    - dn: 'uid=test.user,ou=users,dc=example,dc=com'
     - cn: Test User
     - displayName: Test User
     - gidNumber: '0'
@@ -17,6 +17,7 @@ flow:
     - uid: test.user
     - mail: test.user@example.com
     - postalAddress: test.user@gmail.com
+    - group_dn: 'cn=testGroup,ou=users,dc=example,dc=com'
   workflow:
     - ldap_add:
         do:
@@ -42,9 +43,66 @@ flow:
                  'mail': [b'%s'],
                  'postalAddress': [b'%s']
                 }''' % (cn,displayName,gidNumber,givenName,sn,uidNumber,userPassword,uid,mail,postalAddress)}
-        publish: []
+        publish:
+          - user_dn: '${dn}'
+        navigate:
+          - SUCCESS: add_user_to_group
+          - FAILURE: on_failure
+    - add_user_to_group:
+        do:
+          YuvalRaiz.ldap.actions.ldap_modify:
+            - ldap_url: '${ldap_url}'
+            - ldap_username: '${ldap_username}'
+            - ldap_password:
+                value: '${ldap_password}'
+                sensitive: true
+            - dn: '${group_dn}'
+            - attr: member
+            - new_value: '${user_dn}'
+            - activity: add
+        navigate:
+          - SUCCESS: sleep
+          - FAILURE: remove_user_from_group
+    - sleep:
+        do:
+          io.cloudslang.base.utils.sleep:
+            - seconds: '60'
+        navigate:
+          - SUCCESS: remove_user_from_group
+          - FAILURE: on_failure
+    - remove_user_from_group:
+        do:
+          YuvalRaiz.ldap.actions.ldap_modify:
+            - ldap_url: '${ldap_url}'
+            - ldap_username: '${ldap_username}'
+            - ldap_password:
+                value: '${ldap_password}'
+                sensitive: true
+            - dn: '${group_dn}'
+            - attr: member
+            - new_value: '${user_dn}'
+            - activity: delete
+        navigate:
+          - SUCCESS: sleep_1
+          - FAILURE: ldap_delete
+    - ldap_delete:
+        do:
+          YuvalRaiz.ldap.actions.ldap_delete:
+            - ldap_url: '${ldap_url}'
+            - ldap_username: '${ldap_username}'
+            - ldap_password:
+                value: '${ldap_password}'
+                sensitive: true
+            - dn: '${user_dn}'
         navigate:
           - SUCCESS: SUCCESS
+          - FAILURE: on_failure
+    - sleep_1:
+        do:
+          io.cloudslang.base.utils.sleep:
+            - seconds: '60'
+        navigate:
+          - SUCCESS: ldap_delete
           - FAILURE: on_failure
   results:
     - SUCCESS
@@ -53,14 +111,29 @@ extensions:
   graph:
     steps:
       ldap_add:
-        x: 55
-        'y': 198
+        x: 44
+        'y': 78
+      add_user_to_group:
+        x: 46
+        'y': 262
+      sleep:
+        x: 224
+        'y': 264
+      remove_user_from_group:
+        x: 42
+        'y': 426
+      ldap_delete:
+        x: 33
+        'y': 605
         navigate:
-          97612964-9c54-18c3-d947-fc5e2acbece9:
+          74e590ce-aaee-2b8f-8362-a0637e6222d2:
             targetId: a1559139-c9e5-f75e-e0f0-206ac64f7bd5
             port: SUCCESS
+      sleep_1:
+        x: 217
+        'y': 431
     results:
       SUCCESS:
         a1559139-c9e5-f75e-e0f0-206ac64f7bd5:
-          x: 398
-          'y': 198
+          x: 218
+          'y': 588
